@@ -9,6 +9,11 @@ from neural_pong.config import Config
 from neural_pong.environments.pong import create_env, preprocess_frame
 
 
+def _to_binary_uint8(frame: np.ndarray) -> np.ndarray:
+    """Binarise a normalised frame and store it compactly as uint8."""
+    return (frame >= 0.5).astype(np.uint8) * 255
+
+
 def collect_transitions(
     episodes: int | None = None, output: str = "data/pong_transitions.npz"
 ) -> int:
@@ -17,6 +22,7 @@ def collect_transitions(
 
     env = create_env("PongNoFrameskip-v4")
 
+    prev_frames = []
     frames = []
     next_frames = []
     actions = []
@@ -32,16 +38,18 @@ def collect_transitions(
         obs, _ = env.reset()
         done = False
         step = 0
+        prev_frame = _to_binary_uint8(preprocess_frame(obs, config.frame_size))
 
         while not done and step < config.max_steps_per_episode:
-            frame = preprocess_frame(obs, config.frame_size)
+            frame = _to_binary_uint8(preprocess_frame(obs, config.frame_size))
             action = env.action_space.sample()
 
             next_obs, reward, terminated, truncated, _ = env.step(action)
             done = terminated or truncated
 
-            next_frame = preprocess_frame(next_obs, config.frame_size)
+            next_frame = _to_binary_uint8(preprocess_frame(next_obs, config.frame_size))
 
+            prev_frames.append(prev_frame)
             frames.append(frame)
             next_frames.append(next_frame)
             actions.append(action)
@@ -54,6 +62,7 @@ def collect_transitions(
     env.close()
 
     # Convert to arrays
+    prev_frames = np.array(prev_frames)
     frames = np.array(frames)
     next_frames = np.array(next_frames)
     actions = np.array(actions)
@@ -63,9 +72,10 @@ def collect_transitions(
     # Ensure output directory exists
     Path(output_path).parent.mkdir(parents=True, exist_ok=True)
 
-    # Save
-    np.savez(
+    # Compress: binary frames shrink by ~30-50x over raw float32.
+    np.savez_compressed(
         output_path,
+        prev_frames=prev_frames,
         frames=frames,
         actions=actions,
         next_frames=next_frames,

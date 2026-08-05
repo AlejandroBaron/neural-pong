@@ -31,19 +31,19 @@ uv sync
 uv run neural-pong inspect_environment
 
 # Stage 2: Collect dataset (~100k transitions)
-uv run neural-pong collect_dataset --episodes 100
+uv run neural-pong collect_dataset --episodes 50
 
 # Stage 3-5: Train
 uv run neural-pong train_model --data data/pong_transitions.npz
 
 # Stage 6: Evaluate
-uv run neural-pong evaluate_model --checkpoint checkpoints/world_model_epoch_XX.pt
+uv run neural-pong evaluate_model --checkpoint checkpoints/world_model_6.pt
 
 # Stage 7: Visualize rollouts
-uv run neural-pong visualize_rollouts --checkpoint checkpoints/world_model_epoch_XX.pt
+uv run neural-pong visualize_rollouts --checkpoint checkpoints/world_model_6.pt
 
 # Stage 9: Play neural Pong
-uv run neural-pong play_neural_pong --checkpoint checkpoints/world_model_epoch_XX.pt
+uv run neural-pong play_neural_pong --checkpoint checkpoints/world_model_6.pt
 
 # Run tests and formatting checks
 uv run --dev pytest
@@ -55,24 +55,35 @@ All executable scripts now share the `neural-pong` CLI; run `uv run neural-pong 
 ## Model Architecture
 
 ```
-Input: (frame, action)
+Input: (frame_t-1, frame_t, action_t)
   ↓
-Frame Encoder: CNN → latent vector
+Frame Encoder: CNN → spatial latent maps
   ↓
-Action Embedding: Index → dense vector
+Action Embedding: Index → 64-d vector, broadcast to spatial grid
   ↓
-Concatenate + MLP (transition model)
+Action-conditioned Conv Transition in latent space
+  ↓
+U-Net Decoder with skip connections → residual logit delta
+  ↓
+Final frame = current_frame + predicted delta
   ↓
 Three outputs:
-  - Frame: ConvTranspose → (1, 84, 84)
+  - Frame: raw binary-palette logits `(1, 84, 84)`
   - Reward: Linear → scalar
   - Done: Linear + sigmoid → probability
 ```
 
+The two-frame input gives the model velocity, the U-Net preserves spatial
+positions, and the residual skip lets the network focus on what moves.
+
 ## Loss Function
 
 ```
-L = MSE(frame) + MSE(reward) + BCE(done)
+L = BCEWithLogits(frame) + MSE(reward) + BCE(done)
+
+Frames are thresholded to the binary palette for both teacher forcing and
+autoregressive rollout. Rollout feedback uses the hard argmax palette value,
+while training receives the decoder's raw logits.
 ```
 
 ## CLI

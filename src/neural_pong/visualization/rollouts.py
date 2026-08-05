@@ -44,19 +44,27 @@ def visualize_rollouts(
             for _i in range(min(num_samples // len(rollout_lengths), 5)):
                 start_idx = np.random.randint(0, len(frames) - rollout_len)
 
-                real_frames = [frames[start_idx]]
+                real_frames = [frames[start_idx].astype(np.float32) / 255.0]
                 for j in range(rollout_len):
-                    real_frames.append(next_frames[start_idx + j])
+                    real_frames.append(next_frames[start_idx + j].astype(np.float32) / 255.0)
 
-                current = torch.from_numpy(frames[start_idx]).unsqueeze(0).unsqueeze(0).to(device)
+                # Seed the rollout with two identical frames.
+                current = (
+                    torch.from_numpy(frames[start_idx]).unsqueeze(0).unsqueeze(0).float().to(device)
+                    / 255.0
+                )
+                current = current.repeat(1, 2, 1, 1)
+
                 rollout_actions = (
                     torch.from_numpy(actions[start_idx : start_idx + rollout_len]).long().to(device)
                 )
 
-                pred_frames = [current.cpu().numpy()[0, 0]]
+                pred_frames = [current[0, -1].cpu().numpy()]
                 for act in rollout_actions:
-                    current, _, _ = model.predict_next(current, act.unsqueeze(0))
-                    pred_frames.append(current.cpu().numpy()[0, 0])
+                    prev = current[:, -1:, :, :]
+                    next_frame, _, _ = model.predict_next(current, act.unsqueeze(0))
+                    current = torch.cat([prev, next_frame], dim=1)
+                    pred_frames.append(current[0, -1].cpu().numpy())
 
                 real_arr = np.array(real_frames)
                 pred_arr = np.array(pred_frames)
@@ -64,11 +72,15 @@ def visualize_rollouts(
                 out_path = output_path / f"rollout_{rollout_len}steps_sample{saved}.mp4"
                 height, width = real_arr.shape[-2:]
                 fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-                out = cv2.VideoWriter(str(out_path), fourcc, 30.0, (width * 3, height * 3))
+                out = cv2.VideoWriter(str(out_path), fourcc, 30.0, (width * 2, height))
 
                 for j in range(min(len(real_arr), len(pred_arr))):
-                    real_img = (real_arr[j] * 255).astype(np.uint8).repeat(3, axis=-1)
-                    pred_img = (pred_arr[j] * 255).astype(np.uint8).repeat(3, axis=-1)
+                    real_img = cv2.cvtColor(
+                        (real_arr[j] * 255).astype(np.uint8), cv2.COLOR_GRAY2BGR
+                    )
+                    pred_img = cv2.cvtColor(
+                        (pred_arr[j] * 255).astype(np.uint8), cv2.COLOR_GRAY2BGR
+                    )
                     combined = np.hstack([real_img, pred_img])
                     out.write(combined)
 

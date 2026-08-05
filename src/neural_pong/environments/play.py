@@ -30,7 +30,7 @@ def play_neural_pong(checkpoint: str) -> int:
     obs, _ = real_env.reset()
     _ = neural_env.reset(obs)
 
-    action_map = {0: 0, 1: 1, 2: 3, 3: 2}  # noop, fire, right, left
+    action_map = {0: 0, 1: 1, 2: 2, 3: 3}  # noop, fire, right, left
 
     running = True
     frame_idx = 0
@@ -42,9 +42,9 @@ def play_neural_pong(checkpoint: str) -> int:
         if key == ord("q"):
             running = False
         elif key == ord("w") or key == 83:  # up
-            action = 1
+            action = 2
         elif key == ord("s") or key == 81:  # down
-            action = 0
+            action = 3
 
         real_obs, real_reward, terminated, truncated, _ = real_env.step(action_map.get(action, 0))
         real_done = terminated or truncated

@@ -18,8 +18,11 @@ def train_model(data: str = "data/pong_transitions.npz", resume: str | None = No
     model = WorldModel(latent_dim=config.latent_dim, num_actions=config.num_actions).to(device)
 
     optimizer = optim.Adam(model.parameters(), lr=config.learning_rate)
+    scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=config.num_epochs)
 
-    frame_loss_fn = nn.MSELoss()
+    # Foreground pixels are rare; up-weight them so the ball/paddles matter.
+    pos_weight = torch.tensor([5.0], device=device)
+    frame_loss_fn = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
     reward_loss_fn = nn.MSELoss()
     done_loss_fn = nn.BCELoss()
 
@@ -65,6 +68,8 @@ def train_model(data: str = "data/pong_transitions.npz", resume: str | None = No
             train_losses["frame"] += f_loss.item()
             train_losses["reward"] += r_loss.item()
             train_losses["done"] += d_loss.item()
+
+        scheduler.step()
 
         model.eval()
         val_losses = {"frame": 0, "reward": 0, "done": 0}

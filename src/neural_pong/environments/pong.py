@@ -1,6 +1,9 @@
+import ale_py
 import cv2
 import gymnasium as gym
 import numpy as np
+
+gym.register_envs(ale_py)
 
 
 def preprocess_frame(frame: np.ndarray, size: int = 84) -> np.ndarray:
