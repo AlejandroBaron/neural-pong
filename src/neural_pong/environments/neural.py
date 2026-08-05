@@ -25,7 +25,8 @@ class NeuralPongEnv:
         tensor = torch.from_numpy(frame).float()
         if tensor.max() > 1.0:
             tensor = tensor / 255.0
-        return tensor.unsqueeze(0).unsqueeze(0)
+        # The model was trained on a clean {0, 1} palette.
+        return (tensor >= 0.5).float().unsqueeze(0).unsqueeze(0)
 
     def reset(self, frame: np.ndarray | torch.Tensor | None = None) -> np.ndarray:
         device = next(self.model.parameters()).device
@@ -42,12 +43,19 @@ class NeuralPongEnv:
         self.state = current.repeat(1, 2, 1, 1)
         return self.state[:, -1, :, :].cpu().numpy()[0]
 
+    def set_state(self, prev_frame: np.ndarray, current_frame: np.ndarray) -> None:
+        """Set the internal two-frame buffer from numpy frames."""
+        device = next(self.model.parameters()).device
+        prev_t = self._normalise_frame(prev_frame).to(device)
+        current_t = self._normalise_frame(current_frame).to(device)
+        self.state = torch.cat([prev_t, current_t], dim=1)
+
     def step(self, action: int | torch.Tensor) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         if self.state is None:
             raise ValueError("Must call reset() first")
 
-        if isinstance(action, int):
-            action = torch.tensor([action], device=self.state.device)
+        if isinstance(action, int | np.integer):
+            action = torch.tensor([int(action)], device=self.state.device)
 
         with torch.no_grad():
             next_frame, reward, done = self.model.predict_next(self.state, action)

@@ -59,14 +59,89 @@ class PongDataset(Dataset):
         }
 
 
+class PongSequenceDataset(Dataset):
+    """Return contiguous sequences of transitions for autoregressive training."""
+
+    def __init__(self, data_path: str, seq_len: int = 5):
+        data = np.load(data_path)
+        self.frames = _load_array(data, "frames")
+        self.actions = torch.from_numpy(data["actions"]).long()
+        self.next_frames = _load_array(data, "next_frames")
+        self.rewards = torch.from_numpy(data["rewards"]).float()
+        self.dones = torch.from_numpy(data["dones"]).float()
+
+        if "prev_frames" in data:
+            self.prev_frames = _load_array(data, "prev_frames")
+        else:
+            self.prev_frames = self.frames.clone()
+
+        self.seq_len = seq_len
+        # Avoid indexing past the end of the array.
+        self.valid_len = len(self.frames) - seq_len
+
+    def __len__(self):
+        return max(1, self.valid_len)
+
+    def __getitem__(self, idx):
+        idx = min(idx, self.valid_len - 1)
+        end = idx + self.seq_len
+
+        current_frames = self.frames[idx:end]
+        prev_frames = self.prev_frames[idx:end]
+        next_frames = self.next_frames[idx:end]
+
+        # Binarise and build two-channel input stacks.
+        current_frames = (current_frames >= 0.5).float()
+        prev_frames = (prev_frames >= 0.5).float()
+        next_frames = (next_frames >= 0.5).float()
+
+        # (seq_len, 2, H, W)
+        frame_stacks = torch.cat([prev_frames.unsqueeze(1), current_frames.unsqueeze(1)], dim=1)
+
+        return {
+            "frame": frame_stacks,
+            "action": self.actions[idx:end],
+            "next_frame": next_frames.unsqueeze(1),
+            "reward": self.rewards[idx:end],
+            "done": self.dones[idx:end],
+        }
+
+
 def get_dataloaders(
     data_path: str,
     batch_size: int = 32,
     num_workers: int = 0,
     val_split: float = 0.1,
 ):
-    """"""
     dataset = PongDataset(data_path)
+
+    total_size = len(dataset)
+    val_size = int(total_size * val_split)
+    train_size = total_size - val_size
+
+    train_set, val_set = torch.utils.data.random_split(dataset, [train_size, val_size])
+
+    train_loader = DataLoader(
+        train_set, batch_size=batch_size, shuffle=True, num_workers=num_workers
+    )
+    val_loader = DataLoader(
+        val_set,
+        batch_size=batch_size,
+        shuffle=False,
+        num_workers=num_workers,
+    )
+
+    return train_loader, val_loader
+
+
+def get_sequence_dataloaders(
+    data_path: str,
+    seq_len: int = 5,
+    batch_size: int = 32,
+    num_workers: int = 0,
+    val_split: float = 0.1,
+):
+    dataset = PongSequenceDataset(data_path, seq_len=seq_len)
 
     total_size = len(dataset)
     val_size = int(total_size * val_split)

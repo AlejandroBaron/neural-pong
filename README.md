@@ -42,8 +42,11 @@ uv run neural-pong evaluate_model --checkpoint checkpoints/world_model_6.pt
 # Stage 7: Visualize rollouts
 uv run neural-pong visualize_rollouts --checkpoint checkpoints/world_model_6.pt
 
-# Stage 9: Play neural Pong
+# Stage 8: Play neural Pong (GUI window)
 uv run neural-pong play_neural_pong --checkpoint checkpoints/world_model_6.pt
+
+# Stage 9: Play neural Pong in a terminal (works over SSH)
+uv run neural-pong play_terminal --checkpoint checkpoints/world_model_6.pt
 
 # Run tests and formatting checks
 uv run --dev pytest
