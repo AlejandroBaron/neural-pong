@@ -164,7 +164,7 @@ def train_model(
                         sample_batch["frame"].to(device)[:4], sample_batch["action"].to(device)[:4]
                     )
                 writer.add_images("Sample/Predicted", pred_frame.cpu(), epoch)
-                writer.add_images("Sample/GroundTruth", sample_batch["next_frame"][:4, 0], epoch)
+                writer.add_images("Sample/GroundTruth", sample_batch["next_frame"][:4], epoch)
 
         if (epoch + 1) % config.checkpoint_every == 0:
             idx = (epoch + 1) // config.checkpoint_every

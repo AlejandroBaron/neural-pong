@@ -1,5 +1,6 @@
 """Play neural Pong in a terminal using curses."""
 
+import contextlib
 import curses
 import time
 
@@ -55,10 +56,8 @@ def _render_frame(stdscr, frame: np.ndarray, row: int = 1, col: int = 0) -> None
                     pattern |= _BRAILLE_BITS[(dx, dy)]
             line_chars.append(chr(0x2800 + pattern) if pattern else " ")
         line = "".join(line_chars)
-        try:
+        with contextlib.suppress(curses.error):
             stdscr.addstr(start_row + by, start_col, line, curses.color_pair(1))
-        except curses.error:
-            pass
 
 
 def _play(stdscr, checkpoint: str, _data: str) -> int:
@@ -66,6 +65,7 @@ def _play(stdscr, checkpoint: str, _data: str) -> int:
     stdscr.nodelay(True)
     stdscr.timeout(50)
     curses.init_pair(1, curses.COLOR_WHITE, curses.COLOR_BLACK)
+    stdscr.bkgd(" ", curses.color_pair(1))
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     config = Config()
@@ -85,9 +85,7 @@ def _play(stdscr, checkpoint: str, _data: str) -> int:
     prev_obs = current_obs
 
     stdscr.clear()
-    stdscr.addstr(
-        0, 0, "Terminal Neural Pong — w/↑ up, s/↓ down, space/f fire, q quit"
-    )
+    stdscr.addstr(0, 0, "Terminal Neural Pong — w/↑ up, s/↓ down, space/f fire, q quit")
     stdscr.refresh()
 
     action = 0
@@ -121,18 +119,14 @@ def _play(stdscr, checkpoint: str, _data: str) -> int:
             current_obs = next_obs
 
         stdscr.erase()
-        stdscr.addstr(
-            0, 0, "Terminal Neural Pong — w/↑ up, s/↓ down, space/f fire, q quit"
-        )
+        stdscr.addstr(0, 0, "Terminal Neural Pong — w/↑ up, s/↓ down, space/f fire, q quit")
         _render_frame(stdscr, neural_frame, row=1, col=0)
-        try:
+        with contextlib.suppress(curses.error):
             stdscr.addstr(
                 stdscr.getmaxyx()[0] - 1,
                 0,
                 f"Frame {frame_idx}  Reward: {total_reward:.2f}  Action: {action}",
             )
-        except curses.error:
-            pass
         stdscr.refresh()
 
         # Cap roughly at 30 FPS

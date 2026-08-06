@@ -5,12 +5,12 @@ description = "World model for Pong game"
 requires-python = ">=3.10"
 dependencies = [
     "jsonargparse>=4.50.0",
-    "torch>=2.0.0",
+    "torch==2.6.0+cu124",
     "gymnasium[atari]>=0.29.0",
     "tensorboard>=2.15.0",
     "numpy>=1.24.0",
     "opencv-python>=4.8.0",
-    "torchvision>=0.15.0",
+    "torchvision==0.21.0+cu124",
     "ale-py>=0.4.0",
     "tqdm>=4.66.0",
     "imageio>=2.31.0",
@@ -30,6 +30,10 @@ dev = [
     "pre-commit>=3.8.0",
     "pytest>=8.3.2",
 ]
+
+[[tool.uv.index]]
+name = "pytorch"
+url = "https://download.pytorch.org/whl/cu124"
 
 [tool.setuptools.dynamic]
 version = {attr = "neural_pong.__version__"}
