@@ -77,12 +77,20 @@ def _play(stdscr, checkpoint: str, _data: str) -> int:
 
     neural_env = NeuralPongEnv(model, config.frame_size)
 
-    # The real Atari env provides the true state; the world model only has to
-    # predict the next frame from that state. This avoids autoregressive drift
-    # so the ball and paddles stay visible and react to controls.
+    # Seed the neural env with two real frames (ball in play), then disconnect
+    # the emulator: from here on the game runs purely on the world model,
+    # feeding its own predictions back as input.
     real_env = gym.make("PongNoFrameskip-v4", render_mode="rgb_array")
     current_obs, _ = real_env.reset()
     prev_obs = current_obs
+    for _ in range(30):
+        prev_obs = current_obs
+        current_obs, _, terminated, truncated, _ = real_env.step(1)  # FIRE until served
+        if terminated or truncated:
+            current_obs, _ = real_env.reset()
+            prev_obs = current_obs
+    real_env.close()
+    neural_env.set_state(prev_obs, current_obs)
 
     stdscr.clear()
     stdscr.addstr(0, 0, "Terminal Neural Pong — w/↑ up, s/↓ down, space/f fire, q quit")
@@ -102,21 +110,10 @@ def _play(stdscr, checkpoint: str, _data: str) -> int:
 
         action = _action_from_key(key)
 
-        next_obs, _real_reward, terminated, truncated, _ = real_env.step(action)
-        real_done = terminated or truncated
-
-        # Predict the next frame from the *real* previous and current frames.
-        neural_env.set_state(prev_obs, current_obs)
+        # Autoregressive step: the model consumes its own previous prediction.
         neural_frame, neural_reward, _neural_done = neural_env.step(action)
         total_reward += float(neural_reward.item())
         frame_idx += 1
-
-        if real_done:
-            current_obs, _ = real_env.reset()
-            prev_obs = current_obs
-        else:
-            prev_obs = current_obs
-            current_obs = next_obs
 
         stdscr.erase()
         stdscr.addstr(0, 0, "Terminal Neural Pong — w/↑ up, s/↓ down, space/f fire, q quit")
@@ -135,7 +132,6 @@ def _play(stdscr, checkpoint: str, _data: str) -> int:
             time.sleep(0.033 - elapsed)
         last_frame_time = time.time()
 
-    real_env.close()
     return 0
 
 

@@ -1,5 +1,7 @@
 """Train the world model."""
 
+from itertools import islice
+
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -14,12 +16,14 @@ from neural_pong.models.world_model import WorldModel
 def train_model(
     data: str = "data/pong_transitions.npz",
     resume: str | None = None,
-    autoregressive: bool = False,
+    autoregressive: bool = True,
     seq_len: int = 5,
     prefix: str = "world_model",
     epochs: int | None = None,
 ) -> int:
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    torch.backends.cudnn.benchmark = True
+    use_amp = device.type == "cuda"
     config = Config()
 
     model = WorldModel(latent_dim=config.latent_dim, num_actions=config.num_actions).to(device)
@@ -29,14 +33,12 @@ def train_model(
     scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=num_epochs)
 
     # Foreground pixels are rare; up-weight them so the ball/paddles matter.
-    pos_weight = torch.tensor([5.0], device=device)
+    pos_weight = torch.tensor([10.0], device=device)
     frame_loss_fn = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
     reward_loss_fn = nn.MSELoss()
-    done_loss_fn = nn.BCELoss()
+    done_loss_fn = nn.BCEWithLogitsLoss()
 
-    writer = SummaryWriter(
-        log_dir=str(config.runs_dir / ("ar_world_model" if autoregressive else "world_model"))
-    )
+    writer = SummaryWriter(log_dir=str(config.runs_dir / prefix))
 
     if autoregressive:
         train_loader, val_loader = get_sequence_dataloaders(
@@ -68,58 +70,13 @@ def train_model(
         train_batches = 0
 
         for batch in train_loader:
-            frame = batch["frame"].to(device)
-            action = batch["action"].to(device)
-            next_frame = batch["next_frame"].to(device)
-            reward = batch["reward"].to(device)
-            done = batch["done"].to(device)
+            frame = batch["frame"].to(device, non_blocking=True)
+            action = batch["action"].to(device, non_blocking=True)
+            next_frame = batch["next_frame"].to(device, non_blocking=True)
+            reward = batch["reward"].to(device, non_blocking=True)
+            done = batch["done"].to(device, non_blocking=True)
 
-            if autoregressive:
-                loss, step_losses = _autoregressive_step(
-                    model,
-                    frame_loss_fn,
-                    reward_loss_fn,
-                    done_loss_fn,
-                    frame,
-                    action,
-                    next_frame,
-                    reward,
-                    done,
-                )
-            else:
-                pred_frame, pred_reward, pred_done = model(frame, action)
-
-                f_loss = frame_loss_fn(pred_frame, next_frame)
-                r_loss = reward_loss_fn(pred_reward, reward)
-                d_loss = done_loss_fn(pred_done, done)
-                loss = f_loss + r_loss + d_loss
-                step_losses = {
-                    "frame": f_loss.item(),
-                    "reward": r_loss.item(),
-                    "done": d_loss.item(),
-                }
-
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
-
-            for key in step_losses:
-                train_losses[key] += step_losses[key]
-            train_batches += 1
-
-        scheduler.step()
-
-        model.eval()
-        val_losses = {"frame": 0, "reward": 0, "done": 0}
-        val_batches = 0
-        with torch.no_grad():
-            for batch in val_loader:
-                frame = batch["frame"].to(device)
-                action = batch["action"].to(device)
-                next_frame = batch["next_frame"].to(device)
-                reward = batch["reward"].to(device)
-                done = batch["done"].to(device)
-
+            with torch.autocast(device.type, dtype=torch.bfloat16, enabled=use_amp):
                 if autoregressive:
                     loss, step_losses = _autoregressive_step(
                         model,
@@ -138,11 +95,59 @@ def train_model(
                     f_loss = frame_loss_fn(pred_frame, next_frame)
                     r_loss = reward_loss_fn(pred_reward, reward)
                     d_loss = done_loss_fn(pred_done, done)
+                    loss = f_loss + r_loss + d_loss
                     step_losses = {
                         "frame": f_loss.item(),
                         "reward": r_loss.item(),
                         "done": d_loss.item(),
                     }
+
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+
+            for key in step_losses:
+                train_losses[key] += step_losses[key]
+            train_batches += 1
+
+        scheduler.step()
+
+        model.eval()
+        val_losses = {"frame": 0, "reward": 0, "done": 0}
+        val_batches = 0
+        with torch.no_grad():
+            # Fixed small slice: cheap, consistent val estimate for fast iteration.
+            for batch in islice(val_loader, 40):
+                frame = batch["frame"].to(device)
+                action = batch["action"].to(device)
+                next_frame = batch["next_frame"].to(device)
+                reward = batch["reward"].to(device)
+                done = batch["done"].to(device)
+
+                with torch.autocast(device.type, dtype=torch.bfloat16, enabled=use_amp):
+                    if autoregressive:
+                        loss, step_losses = _autoregressive_step(
+                            model,
+                            frame_loss_fn,
+                            reward_loss_fn,
+                            done_loss_fn,
+                            frame,
+                            action,
+                            next_frame,
+                            reward,
+                            done,
+                        )
+                    else:
+                        pred_frame, pred_reward, pred_done = model(frame, action)
+
+                        f_loss = frame_loss_fn(pred_frame, next_frame)
+                        r_loss = reward_loss_fn(pred_reward, reward)
+                        d_loss = done_loss_fn(pred_done, done)
+                        step_losses = {
+                            "frame": f_loss.item(),
+                            "reward": r_loss.item(),
+                            "done": d_loss.item(),
+                        }
 
                 for key in step_losses:
                     val_losses[key] += step_losses[key]
@@ -164,7 +169,10 @@ def train_model(
                         sample_batch["frame"].to(device)[:4], sample_batch["action"].to(device)[:4]
                     )
                 writer.add_images("Sample/Predicted", pred_frame.cpu(), epoch)
-                writer.add_images("Sample/GroundTruth", sample_batch["next_frame"][:4], epoch)
+                gt = sample_batch["next_frame"]
+                writer.add_images(
+                    "Sample/GroundTruth", gt[:4, 0] if autoregressive else gt[:4], epoch
+                )
 
         if (epoch + 1) % config.checkpoint_every == 0:
             idx = (epoch + 1) // config.checkpoint_every

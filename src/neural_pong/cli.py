@@ -13,9 +13,12 @@ from neural_pong.visualization.rollouts import visualize_rollouts
 
 class CLI:
     def collect_dataset(
-        self, episodes: int | None = None, output: str = "data/pong_transitions.npz"
+        self,
+        episodes: int | None = None,
+        output: str = "data/pong_transitions.npz",
+        policy: str = "oracle",
     ) -> int:
-        return collect_transitions(episodes, output)
+        return collect_transitions(episodes, output, policy)
 
     def evaluate_model(
         self,
@@ -51,7 +54,7 @@ class CLI:
         self,
         data: str = "data/pong_transitions.npz",
         resume: str | None = None,
-        autoregressive: bool = False,
+        autoregressive: bool = True,
         seq_len: int = 5,
         prefix: str = "world_model",
         epochs: int | None = None,

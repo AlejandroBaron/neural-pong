@@ -122,7 +122,7 @@ def get_dataloaders(
     train_set, val_set = torch.utils.data.random_split(dataset, [train_size, val_size])
 
     train_loader = DataLoader(
-        train_set, batch_size=batch_size, shuffle=True, num_workers=num_workers
+        train_set, batch_size=batch_size, shuffle=True, num_workers=num_workers, pin_memory=True
     )
     val_loader = DataLoader(
         val_set,
@@ -150,7 +150,7 @@ def get_sequence_dataloaders(
     train_set, val_set = torch.utils.data.random_split(dataset, [train_size, val_size])
 
     train_loader = DataLoader(
-        train_set, batch_size=batch_size, shuffle=True, num_workers=num_workers
+        train_set, batch_size=batch_size, shuffle=True, num_workers=num_workers, pin_memory=True
     )
     val_loader = DataLoader(
         val_set,

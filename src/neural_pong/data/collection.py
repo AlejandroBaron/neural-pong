@@ -14,10 +14,29 @@ def _to_binary_uint8(frame: np.ndarray) -> np.ndarray:
     return (frame >= 0.5).astype(np.uint8) * 255
 
 
+def _oracle_action(ram: np.ndarray, rng: np.random.Generator, epsilon: float = 0.05) -> int:
+    """Perfect player from Pong RAM: serve when the ball is out, else track ball y.
+
+    RAM map: ram[49]=ball_x (0 when not in play), ram[54]=ball_y, ram[51]=player paddle y.
+    """
+    if rng.random() < epsilon:
+        return int(rng.integers(6))
+    ball_x, ball_y, player_y = ram[49], ram[54], ram[51]
+    if ball_x == 0:
+        return 1  # FIRE to serve
+    if ball_y < player_y - 2:
+        return 2  # paddle up
+    if ball_y > player_y + 2:
+        return 3  # paddle down
+    return 0
+
+
 def collect_transitions(
-    episodes: int | None = None, output: str = "data/pong_transitions.npz"
+    episodes: int | None = None,
+    output: str = "data/pong_transitions.npz",
+    policy: str = "oracle",
 ) -> int:
-    """Collect Pong dataset using random policy."""
+    """Collect Pong dataset using an oracle (perfect) or random policy."""
     config = Config()
 
     env = create_env("PongNoFrameskip-v4")
@@ -31,8 +50,9 @@ def collect_transitions(
 
     num_episodes = episodes or config.num_episodes
     output_path = output
+    rng = np.random.default_rng(42)
 
-    print(f"Collecting {num_episodes} episodes...")
+    print(f"Collecting {num_episodes} episodes with {policy} policy...")
 
     for _episode in tqdm(range(num_episodes), desc="Episodes"):
         obs, _ = env.reset()
@@ -42,7 +62,10 @@ def collect_transitions(
 
         while not done and step < config.max_steps_per_episode:
             frame = _to_binary_uint8(preprocess_frame(obs, config.frame_size))
-            action = env.action_space.sample()
+            if policy == "oracle":
+                action = _oracle_action(env.unwrapped.ale.getRAM(), rng)
+            else:
+                action = env.action_space.sample()
 
             next_obs, reward, terminated, truncated, _ = env.step(action)
             done = terminated or truncated

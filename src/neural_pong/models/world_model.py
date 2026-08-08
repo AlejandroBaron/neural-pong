@@ -97,7 +97,7 @@ class WorldModel(nn.Module):
 
         pooled = F.adaptive_avg_pool2d(latent, 1).view(frame.size(0), -1)
         reward = self.reward_head(pooled).squeeze(-1)
-        done = torch.sigmoid(self.done_head(pooled)).squeeze(-1)
+        done = self.done_head(pooled).squeeze(-1)  # logits; sigmoid applied at inference
 
         return frame_pred, reward, done
 
@@ -112,5 +112,5 @@ class WorldModel(nn.Module):
         self, frame: torch.Tensor, action: torch.Tensor
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """Predict the next frame using hard palette feedback."""
-        frame_logits, reward, done = self.forward(frame, action)
-        return self.hard_quantize(frame_logits), reward, done
+        frame_logits, reward, done_logits = self.forward(frame, action)
+        return self.hard_quantize(frame_logits), reward, torch.sigmoid(done_logits)

@@ -62,7 +62,7 @@ def evaluate_model(
             frame_prob = torch.sigmoid(pred_frame)
             frame_mse += frame_loss_fn(frame_prob, next_frame).item() * len(frame)
             reward_mse += reward_loss_fn(pred_reward, reward).item() * len(reward)
-            pred_done_binary = (pred_done > 0.5).float()
+            pred_done_binary = (pred_done > 0).float()  # done head emits logits
             done_correct += (pred_done_binary == done).sum().item()
             total += len(frame)
 
