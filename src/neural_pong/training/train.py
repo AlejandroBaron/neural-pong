@@ -16,17 +16,22 @@ from neural_pong.models.world_model import WorldModel
 def train_model(
     data: str = "data/pong_transitions.npz",
     resume: str | None = None,
-    autoregressive: bool = True,
+    autoregressive: bool = False,  # ponytail: AR works but TF preferred for now
     seq_len: int = 5,
     prefix: str = "world_model",
     epochs: int | None = None,
+    corrupt: float = 0.0,
 ) -> int:
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     torch.backends.cudnn.benchmark = True
     use_amp = device.type == "cuda"
     config = Config()
 
-    model = WorldModel(latent_dim=config.latent_dim, num_actions=config.num_actions).to(device)
+    model = WorldModel(
+        latent_dim=config.latent_dim,
+        num_actions=config.num_actions,
+        in_channels=config.frame_channels,
+    ).to(device)
 
     optimizer = optim.Adam(model.parameters(), lr=config.learning_rate)
     num_epochs = epochs if epochs is not None else config.num_epochs
@@ -47,6 +52,7 @@ def train_model(
             batch_size=config.batch_size,
             num_workers=config.num_workers,
             val_split=config.val_split,
+            history=config.frame_channels,
         )
     else:
         train_loader, val_loader = get_dataloaders(
@@ -54,6 +60,7 @@ def train_model(
             batch_size=config.batch_size,
             num_workers=config.num_workers,
             val_split=config.val_split,
+            history=config.frame_channels,
         )
 
     start_epoch = 0
@@ -76,6 +83,12 @@ def train_model(
             reward = batch["reward"].to(device, non_blocking=True)
             done = batch["done"].to(device, non_blocking=True)
 
+            # DAgger-style input corruption: with probability `corrupt`, replace the
+            # latest history frame with the model's own snapped prediction, so the
+            # training input distribution matches rollout conditions. Ramped in over
+            # the first fifth of training while predictions are still garbage.
+            corrupt_p = corrupt if epoch >= 0.2 * num_epochs else 0.0
+
             with torch.autocast(device.type, dtype=torch.bfloat16, enabled=use_amp):
                 if autoregressive:
                     loss, step_losses = _autoregressive_step(
@@ -90,7 +103,12 @@ def train_model(
                         done,
                     )
                 else:
-                    pred_frame, pred_reward, pred_done = model(frame, action)
+                    frame_in = frame
+                    if corrupt_p > 0 and torch.rand(()) < corrupt_p:
+                        with torch.no_grad():
+                            own = WorldModel.hard_quantize(model(frame, action)[0])
+                            frame_in = torch.cat([frame[:, 1:], own], dim=1)
+                    pred_frame, pred_reward, pred_done = model(frame_in, action)
 
                     f_loss = frame_loss_fn(pred_frame, next_frame)
                     r_loss = reward_loss_fn(pred_reward, reward)

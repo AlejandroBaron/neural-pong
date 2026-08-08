@@ -10,9 +10,10 @@ from neural_pong.models.world_model import WorldModel
 class NeuralPongEnv:
     """Advance frames using a trained world model."""
 
-    def __init__(self, model: WorldModel, frame_size: int = 84) -> None:
+    def __init__(self, model: WorldModel, frame_size: int = 84, history: int = 4) -> None:
         self.model = model
         self.frame_size = frame_size
+        self.history = history
         self.state: torch.Tensor | None = None
 
     def _normalise_frame(self, frame: np.ndarray) -> torch.Tensor:
@@ -39,16 +40,18 @@ class NeuralPongEnv:
             if current.dim() == 3:
                 current = current.unsqueeze(0)
 
-        # Duplicate the initial frame so the model still sees two channels.
-        self.state = current.repeat(1, 2, 1, 1)
+        # Repeat the initial frame so the model still sees a full history stack.
+        self.state = current.repeat(1, self.history, 1, 1)
         return self.state[:, -1, :, :].cpu().numpy()[0]
 
-    def set_state(self, prev_frame: np.ndarray, current_frame: np.ndarray) -> None:
-        """Set the internal two-frame buffer from numpy frames."""
+    def set_state(self, frames: list[np.ndarray]) -> None:
+        """Set the internal history buffer; pads with the oldest frame if short."""
         device = next(self.model.parameters()).device
-        prev_t = self._normalise_frame(prev_frame).to(device)
-        current_t = self._normalise_frame(current_frame).to(device)
-        self.state = torch.cat([prev_t, current_t], dim=1)
+        frames = frames[-self.history :]
+        stack = [self._normalise_frame(f).to(device) for f in frames]
+        while len(stack) < self.history:
+            stack.insert(0, stack[0])
+        self.state = torch.cat(stack, dim=1)
 
     def step(self, action: int | torch.Tensor) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         if self.state is None:

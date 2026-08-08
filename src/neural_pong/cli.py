@@ -54,12 +54,13 @@ class CLI:
         self,
         data: str = "data/pong_transitions.npz",
         resume: str | None = None,
-        autoregressive: bool = True,
+        autoregressive: bool = False,
         seq_len: int = 5,
         prefix: str = "world_model",
         epochs: int | None = None,
+        corrupt: float = 0.0,
     ) -> int:
-        return train_model(data, resume, autoregressive, seq_len, prefix, epochs)
+        return train_model(data, resume, autoregressive, seq_len, prefix, epochs, corrupt)
 
     def visualize_rollouts(
         self,

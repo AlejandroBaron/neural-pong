@@ -15,7 +15,7 @@ class Config:
 
     # Model
     frame_size: int = 84
-    frame_channels: int = 2
+    frame_channels: int = 4  # history stack: velocity needs more than 2 frames
     frame_shape: tuple = (84, 84)
     num_actions: int = 6
     latent_dim: int = 256

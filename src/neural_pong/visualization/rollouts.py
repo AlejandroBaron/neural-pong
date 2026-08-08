@@ -53,7 +53,7 @@ def visualize_rollouts(
                     torch.from_numpy(frames[start_idx]).unsqueeze(0).unsqueeze(0).float().to(device)
                     / 255.0
                 )
-                current = current.repeat(1, 2, 1, 1)
+                current = current.repeat(1, config.frame_channels, 1, 1)
 
                 rollout_actions = (
                     torch.from_numpy(actions[start_idx : start_idx + rollout_len]).long().to(device)

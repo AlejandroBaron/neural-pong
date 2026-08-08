@@ -5,7 +5,7 @@ from neural_pong.models import WorldModel
 
 def test_forward_shapes():
     model = WorldModel(latent_dim=128, num_actions=4)
-    frame = torch.rand(2, 2, 84, 84)
+    frame = torch.rand(2, 4, 84, 84)
     action = torch.tensor([0, 1])
 
     predicted_frame, reward, done = model(frame, action)
@@ -21,7 +21,7 @@ def test_predict_next_returns_hard_palette_values():
         model.decoder_conv4.weight.zero_()
         model.decoder_conv4.bias.fill_(2.0)
 
-    frame = torch.rand(1, 2, 84, 84)
+    frame = torch.rand(1, 4, 84, 84)
     action = torch.tensor([0])
 
     logits, _, _ = model(frame, action)

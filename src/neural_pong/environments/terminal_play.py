@@ -77,26 +77,27 @@ def _play(stdscr, checkpoint: str, _data: str) -> int:
 
     neural_env = NeuralPongEnv(model, config.frame_size)
 
-    # Seed the neural env with two real frames (ball in play), then disconnect
+    # Seed the neural env with a few real frames (ball in play), then disconnect
     # the emulator: from here on the game runs purely on the world model,
     # feeding its own predictions back as input.
     real_env = gym.make("PongNoFrameskip-v4", render_mode="rgb_array")
     current_obs, _ = real_env.reset()
-    prev_obs = current_obs
+    seed_frames = [current_obs]
     for _ in range(30):
-        prev_obs = current_obs
         current_obs, _, terminated, truncated, _ = real_env.step(1)  # FIRE until served
         if terminated or truncated:
             current_obs, _ = real_env.reset()
-            prev_obs = current_obs
+        seed_frames.append(current_obs)
     real_env.close()
-    neural_env.set_state(prev_obs, current_obs)
+    neural_env.set_state(seed_frames[-config.frame_channels :])
 
     stdscr.clear()
     stdscr.addstr(0, 0, "Terminal Neural Pong — w/↑ up, s/↓ down, space/f fire, q quit")
     stdscr.refresh()
 
     action = 0
+    held_action = 0
+    hold_left = 0
     total_reward = 0.0
     frame_idx = 0
     running = True
@@ -108,7 +109,15 @@ def _play(stdscr, checkpoint: str, _data: str) -> int:
             running = False
             break
 
-        action = _action_from_key(key)
+        # A keypress lasts 3 fantasy frames; a single frame is too weak a signal.
+        key_action = _action_from_key(key)
+        if key_action != 0:
+            held_action, hold_left = key_action, 3
+        if hold_left > 0:
+            action = held_action
+            hold_left -= 1
+        else:
+            action = 0
 
         # Autoregressive step: the model consumes its own previous prediction.
         neural_frame, neural_reward, _neural_done = neural_env.step(action)

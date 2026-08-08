@@ -7,9 +7,10 @@ gym.register_envs(ale_py)
 
 
 def preprocess_frame(frame: np.ndarray, size: int = 84) -> np.ndarray:
-    """Convert frame to grayscale and resize."""
+    """Convert frame to grayscale, resize, and mask the score band (rows 0-7)."""
     gray = cv2.cvtColor(frame, cv2.COLOR_RGB2GRAY)
     resized = cv2.resize(gray, (size, size), interpolation=cv2.INTER_AREA)
+    resized[:8, :] = 0  # score digits: not part of the game the model must learn
     return resized.astype(np.float32) / 255.0
 
 

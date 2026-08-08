@@ -6,17 +6,17 @@ import torch.nn.functional as F
 class WorldModel(nn.Module):
     """U-Net world model with action-conditioned spatial transition.
 
-    Input: two-channel frame stack [previous_frame, current_frame] and action.
+    Input: frame history stack [t-k .. t] and action.
     Output: predicted next frame logits, reward, done probability.
     """
 
-    def __init__(self, latent_dim: int = 256, num_actions: int = 6):
+    def __init__(self, latent_dim: int = 256, num_actions: int = 6, in_channels: int = 4):
         super().__init__()
         self.latent_dim = latent_dim
         self.num_actions = num_actions
 
         # Encoder: 84 -> 42 -> 21 -> 11 -> 6
-        self.conv1 = nn.Conv2d(2, 32, 5, stride=2, padding=2)
+        self.conv1 = nn.Conv2d(in_channels, 32, 5, stride=2, padding=2)
         self.conv2 = nn.Conv2d(32, 64, 5, stride=2, padding=2)
         self.conv3 = nn.Conv2d(64, 128, 5, stride=2, padding=2)
         self.conv4 = nn.Conv2d(128, latent_dim, 5, stride=2, padding=2)
