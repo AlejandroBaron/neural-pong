@@ -44,19 +44,26 @@ def generate_gifs(
             for _i in range(min(num_samples // len(rollout_lengths), 5)):
                 start_idx = np.random.randint(0, len(frames) - rollout_len)
 
-                real_frames = [frames[start_idx]]
+                real_frames = [frames[start_idx].astype(np.float32) / 255.0]
                 for j in range(rollout_len):
-                    real_frames.append(next_frames[start_idx + j])
+                    real_frames.append(next_frames[start_idx + j].astype(np.float32) / 255.0)
 
-                current = torch.from_numpy(frames[start_idx]).unsqueeze(0).unsqueeze(0).to(device)
+                current = (
+                    torch.from_numpy(frames[start_idx]).unsqueeze(0).unsqueeze(0).float().to(device)
+                    / 255.0
+                )
+                current = current.repeat(1, config.frame_channels, 1, 1)
+
                 rollout_actions = (
                     torch.from_numpy(actions[start_idx : start_idx + rollout_len]).long().to(device)
                 )
 
-                pred_frames = [current.cpu().numpy()[0, 0]]
+                pred_frames = [current[0, -1].cpu().numpy()]
                 for act in rollout_actions:
-                    current, _, _ = model.predict_next(current, act.unsqueeze(0))
-                    pred_frames.append(current.cpu().numpy()[0, 0])
+                    prev = current[:, -1:, :, :]
+                    next_frame, _, _ = model.predict_next(current, act.unsqueeze(0))
+                    current = torch.cat([prev, next_frame], dim=1)
+                    pred_frames.append(current[0, -1].cpu().numpy())
 
                 real_arr = np.array(real_frames)
                 pred_arr = np.array(pred_frames)
@@ -64,9 +71,9 @@ def generate_gifs(
 
                 gif_data = []
                 for j in range(min(len(real_arr), len(pred_arr))):
-                    real_img = (real_arr[j] * 255).astype(np.uint8).repeat(3, axis=-1)
-                    pred_img = (pred_arr[j] * 255).astype(np.uint8).repeat(3, axis=-1)
-                    diff_img = (diff[j] * 255).astype(np.uint8).repeat(3, axis=-1)
+                    real_img = np.stack([(real_arr[j] * 255)] * 3, axis=-1).astype(np.uint8)
+                    pred_img = np.stack([(pred_arr[j] * 255)] * 3, axis=-1).astype(np.uint8)
+                    diff_img = np.stack([(diff[j] * 255)] * 3, axis=-1).astype(np.uint8)
 
                     combined = np.vstack([real_img, pred_img, diff_img])
                     gif_data.append(combined)

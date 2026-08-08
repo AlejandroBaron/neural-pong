@@ -12,6 +12,6 @@ build/
 /data/
 /checkpoints/
 /runs/
-/eval/
-/gifs/
+/eval*
+/gifs*
 /videos/

@@ -15,12 +15,12 @@ class Config:
 
     # Model
     frame_size: int = 84
-    frame_channels: int = 1
+    frame_channels: int = 4  # history stack: velocity needs more than 2 frames
     frame_shape: tuple = (84, 84)
-    num_actions: int = 4
-    latent_dim: int = 512
-    learning_rate: float = 1e-4
-    batch_size: int = 32
+    num_actions: int = 6
+    latent_dim: int = 256
+    learning_rate: float = 3e-4
+    batch_size: int = 256
     num_workers: int = 4
 
     # Training

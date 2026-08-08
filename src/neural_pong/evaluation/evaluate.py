@@ -59,16 +59,17 @@ def evaluate_model(
 
             pred_frame, pred_reward, pred_done = model(frame, action)
 
-            frame_mse += frame_loss_fn(pred_frame, next_frame).item() * len(frame)
+            frame_prob = torch.sigmoid(pred_frame)
+            frame_mse += frame_loss_fn(frame_prob, next_frame).item() * len(frame)
             reward_mse += reward_loss_fn(pred_reward, reward).item() * len(reward)
-            pred_done_binary = (pred_done > 0.5).float()
+            pred_done_binary = (pred_done > 0).float()  # done head emits logits
             done_correct += (pred_done_binary == done).sum().item()
             total += len(frame)
 
             if saved < samples_to_save:
                 for i in range(min(len(frame), samples_to_save - saved)):
-                    gt = next_frame[i].cpu().numpy()
-                    pred = pred_frame[i].cpu().numpy()
+                    gt = next_frame[i, 0].cpu().numpy()
+                    pred = frame_prob[i, 0].cpu().numpy()
                     diff = np.abs(gt - pred)
 
                     comparison = np.hstack(

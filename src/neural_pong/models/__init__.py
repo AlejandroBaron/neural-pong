@@ -1,3 +1,3 @@
-from neural_pong.models.world_model import FrameEncoder, WorldModel
+from neural_pong.models.world_model import WorldModel
 
-__all__ = ["FrameEncoder", "WorldModel"]
+__all__ = ["WorldModel"]

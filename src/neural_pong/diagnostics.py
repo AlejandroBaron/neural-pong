@@ -11,7 +11,7 @@ def run_model_self_test() -> int:
         model = WorldModel(latent_dim=128, num_actions=4)
 
         print("Testing forward pass...")
-        frame = torch.rand(2, 1, 84, 84)
+        frame = torch.rand(2, 2, 84, 84)
         action = torch.tensor([0, 1])
 
         pred_frame, reward, done = model(frame, action)

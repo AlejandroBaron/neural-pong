@@ -1,12 +1,20 @@
+import ale_py
 import cv2
 import gymnasium as gym
 import numpy as np
 
+gym.register_envs(ale_py)
+
 
 def preprocess_frame(frame: np.ndarray, size: int = 84) -> np.ndarray:
-    """Convert frame to grayscale and resize."""
+    """Crop to the playfield (drops score and borders), grayscale, resize.
+
+    Cropping before resizing buys ~15% vertical resolution, which is what keeps
+    the ball separable from the walls during bounces.
+    """
     gray = cv2.cvtColor(frame, cv2.COLOR_RGB2GRAY)
-    resized = cv2.resize(gray, (size, size), interpolation=cv2.INTER_AREA)
+    cropped = gray[24:210, 8:152]  # walls at raw rows 24-33 and 194-209
+    resized = cv2.resize(cropped, (size, size), interpolation=cv2.INTER_AREA)
     return resized.astype(np.float32) / 255.0
 
 
