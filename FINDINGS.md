@@ -108,15 +108,49 @@ uv run neural-pong play_terminal --checkpoint checkpoints/tf_v5_corrupt05_11.pt
 Watch loss: `tensorboard --logdir runs`. Val typically bottoms around epoch 45;
 pick the checkpoint nearest the val minimum, not the last one.
 
+## Round 2: bounces, resets, serve recovery (v6)
+
+Symptoms reported from play-testing `tf_v5_corrupt05_11`: ball goes crazy when
+bouncing off top/bottom walls and on point resets; left paddle missing at start.
+
+Diagnosis: in the data itself the ball **fuses with the wall** at contact — the
+210×160 → 84×84 resize crushes vertical resolution 2.5:1, so the ball becomes a
+tick hanging off the wall line. High-change transitions (bounces, paddle hits,
+resets) are also rare (~0.3% of frames), so the model gets little gradient on
+them.
+
+Fixes:
+
+1. **Crop before resize** (`preprocess_frame`): crop to playfield `[24:210, 8:152]`
+   (walls at raw rows 24–33/194–209), then resize. Score band removed by the
+   crop, mask no longer needed. ~15% more vertical resolution.
+2. **Oversample high-change transitions** (`--oversample 3`): WeightedRandomSampler
+   with weights ∝ 1 + 3·(frame-diff / mean). Bounces/resets drawn more often.
+3. Keep `--corrupt 0.5`.
+
+Result (`tf_v6_c05_os3_4`, val-optimal checkpoint at epoch 19 — pick by val, not
+by recency):
+
+- 600-step rollouts from 3 serve seeds: alive in every 50-step window; ball
+  present 72–88% of steps. (~20s of self-fed play; v5 models died by step 300.)
+- Bounce test: seeded 6 frames before a top-wall bounce, ball rebounds and
+  returns (was the "goes crazy" case).
+- Keys: UP −28, DOWN +5, NOOP −6 over 20 held frames.
+- Quirk: the model drops the walls but plays correctly without them (bounce
+  physics internalised). Terminal renderer now paints the static walls itself.
+
+`scripts/evaluate_rollout.py` runs the whole battery against any checkpoint.
+
 ## Open issues / next dials
 
-1. Serve states: 4 frames can't encode random serve timing → model hedges and
-   sometimes stalls tens of frames before the ball appears. More history or a
-   stochastic output head would address it.
-2. Nothing survives ~300 self-fed steps. Dials: corruption 0.35 with ~100
-   epochs; corrupt the whole history stack, not one frame; latent rollout
-   (Dreamer-style) as the structural fix.
-3. Done flags: collection truncates episodes at 2000 steps without setting
+1. DOWN key response is weaker than UP (+5 vs −28 per 20 held frames). Next
+   lever: inject the action as an input channel / at the decoder, not just the
+   6×6 bottleneck.
+2. Serve states still stall ~10–50 frames before the ball appears (random serve
+   timing is invisible in 4 frames). More history or a stochastic head.
+3. Structural fix if longer horizons are needed: Dreamer-style latent rollout
+   (PLAN.md syllabus).
+4. Done flags: collection truncates episodes at 2000 steps without setting
    done, so `dones` are all 0 — episode boundaries are every 2000 rows.
-4. Terminal play: keypresses are held 3 fantasy frames (a 1-frame tap is too
+5. Terminal play: keypresses are held 3 fantasy frames (a 1-frame tap is too
    weak); seeding takes the last 4 real frames after ~30 FIRE steps.

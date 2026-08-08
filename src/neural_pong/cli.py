@@ -59,8 +59,11 @@ class CLI:
         prefix: str = "world_model",
         epochs: int | None = None,
         corrupt: float = 0.0,
+        oversample: float = 0.0,
     ) -> int:
-        return train_model(data, resume, autoregressive, seq_len, prefix, epochs, corrupt)
+        return train_model(
+            data, resume, autoregressive, seq_len, prefix, epochs, corrupt, oversample
+        )
 
     def visualize_rollouts(
         self,

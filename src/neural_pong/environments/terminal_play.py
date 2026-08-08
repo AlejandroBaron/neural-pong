@@ -38,6 +38,10 @@ def _action_from_key(key: int) -> int:
 
 def _render_frame(stdscr, frame: np.ndarray, row: int = 1, col: int = 0) -> None:
     """Draw a binary 84x84 frame with Unicode braille (42x21 cells)."""
+    # The model drops static furniture but plays correctly without it (it
+    # internalised the wall: bounce physics work). Paint walls for display only.
+    frame[:5, :] = 1.0
+    frame[78:, :] = 1.0
     height, width = stdscr.getmaxyx()
     out_h = 84 // 4
     out_w = 84 // 2

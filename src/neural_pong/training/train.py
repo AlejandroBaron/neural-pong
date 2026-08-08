@@ -21,6 +21,7 @@ def train_model(
     prefix: str = "world_model",
     epochs: int | None = None,
     corrupt: float = 0.0,
+    oversample: float = 0.0,
 ) -> int:
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     torch.backends.cudnn.benchmark = True
@@ -61,6 +62,7 @@ def train_model(
             num_workers=config.num_workers,
             val_split=config.val_split,
             history=config.frame_channels,
+            oversample=oversample,
         )
 
     start_epoch = 0

@@ -1,6 +1,6 @@
 import numpy as np
 import torch
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import DataLoader, Dataset, WeightedRandomSampler
 
 
 def _load_array(data, key):
@@ -110,6 +110,7 @@ def get_dataloaders(
     num_workers: int = 0,
     val_split: float = 0.1,
     history: int = 4,
+    oversample: float = 0.0,
 ):
     dataset = PongDataset(data_path, history=history)
 
@@ -119,8 +120,21 @@ def get_dataloaders(
 
     train_set, val_set = torch.utils.data.random_split(dataset, [train_size, val_size])
 
+    sampler = None
+    if oversample > 0:
+        # Bounces, paddle hits and point resets are the rare high-change frames
+        # the model gets wrong; draw them more often.
+        diff = (dataset.frames != dataset.next_frames).float().mean(dim=(1, 2))
+        weights = 1.0 + oversample * diff / diff.mean()
+        sampler = WeightedRandomSampler(weights[train_set.indices], len(train_set))
+
     train_loader = DataLoader(
-        train_set, batch_size=batch_size, shuffle=True, num_workers=num_workers, pin_memory=True
+        train_set,
+        batch_size=batch_size,
+        shuffle=sampler is None,
+        sampler=sampler,
+        num_workers=num_workers,
+        pin_memory=True,
     )
     val_loader = DataLoader(
         val_set,
